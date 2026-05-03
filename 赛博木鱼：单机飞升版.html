@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>赛博木鱼：单机飞升版</title>
+    <style>
+        /* 
+         * =========================================
+         * 赛博木鱼 - 全局样式与变量定义
+         * =========================================
+         */
+        :root {
+            /* 核心配色方案 - 赛博朋克风格 */
+            --bg-color: #050505;
+            --text-color: #e0e0e0;
+            --panel-bg: rgba(20, 20, 20, 0.8);
+            
+            /* 动态辉光颜色，JS将根据等级修改此值 */
+            --primary-glow: #00ffea; /* 赛博青 */
+            --secondary-glow: #ff00ff; /* 赛博粉 */
+            --accent-color: #ffd700; /* 金色 */
+
+            /* 字体 */
+            --font-main: 'Courier New', Courier, monospace; /* 代码感字体 */
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none; /* 禁止长按选中文本，提升游戏体验 */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            overflow: hidden; /* 防止滚动 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 背景网格特效 */
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: 
+                linear-gradient(rgba(0, 255, 234, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 234, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* 
+         * =========================================
+         * 顶部数据面板 (HUD)
+         * =========================================
+         */
+        .hud {
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            font-size: 14px;
+            z-index: 10;
+        }
+
+        .merit-display {
+            text-align: left;
+        }
+
+        .merit-count {
+            font-size: 2rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px var(--primary-glow);
+            white-space: nowrap;
+        }
+
+        .merit-label {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .stats-display {
+            text-align: right;
+            opacity: 0.8;
+        }
+
+        /* 
+         * =========================================
+         * 中央交互区 (木鱼)
+         * =========================================
+         */
+        .game-stage {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            width: 100%;
+        }
+
+        /* 木鱼容器 - 用于震动动画 */
+        .woodfish-wrapper {
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Q弹效果 */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .woodfish-wrapper:active {
+            transform: scale(0.92); /* 点击时的按压感 */
+        }
+
+        /* SVG 木鱼绘制 */
+        .woodfish-svg {
+            width: 220px;
+            height: 220px;
+            filter: drop-shadow(0 0 15px var(--primary-glow));
+            transition: filter 0.5s ease;
+        }
+
+        /* 浮动文字动画容器 */
+        .floating-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            overflow: visible;
+        }
+
+        .floater {
+            position: absolute;
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary-glow);
+            animation: floatUp 1s ease-out forwards;
+            text-shadow: 0 0 5px var(--primary-glow);
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1.2); }
+        }
+
+        /* 屏幕震动关键帧 */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        .shake-effect {
+            animation: shake 0.2s;
+        }
+
+        /* 
+         * =========================================
+         * 底部商店面板
+         * =========================================
+         */
+        .shop-panel {
+            width: 100%;
+            background: var(--panel-bg);
+            border-top: 1px solid #333;
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            max-height: 35vh;
+            overflow-y: auto;
+            z-index: 20;
+        }
+
+        .shop-title {
+            font-size: 12px;
+            color: var(--secondary-glow);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+
+        .upgrade-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            margin-bottom: 8px;
+            padding: 10px 15px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .upgrade-item:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--primary-glow);
+        }
+
+        .upgrade-item.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(1);
+        }
+
+        .item-info h4 {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .item-info p {
+            margin: 2px 0 0;
+            font-size: 10px;
+            color: #888;
+        }
+
+        .item-cost {
+            text-align: right;
+        }
+
+        .cost-val {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+        
+        .owned-count {
+            font-size: 18px;
+            color: var(--primary-glow);
+            margin-left: 10px;
+            min-width: 30px;
+            text-align: center;
+        }
+
+        /* 
+         * =========================================
+         * 进化特效 (Classes toggled by JS)
+         * =========================================
+         */
+        
+        /* 阶段1: 赛博青 */
+        .level-1 .woodfish-svg {
+            filter: drop-shadow(0 0 20px var(--primary-glow));
+        }
+        
+        /* 阶段2: 赛博粉 + 故障风 */
+        .level-2 {
+            --primary-glow: #ff00ff;
+        }
+        .level-2 .woodfish-svg {
+            filter: drop-shadow(0 0 25px var(--secondary-glow));
+            animation: glitch 3s infinite;
+        }
+
+        /* 阶段3: 金光飞升 */
+        .level-3 {
+            --primary-glow: #ffd700;
+            --bg-color: #1a1a00;
+        }
+        .level-3 .woodfish-svg {
+            filter: drop-shadow(0 0 40px var(--accent-color));
+            animation: pulseGold 2s infinite;
+        }
+
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+        
+        @keyframes pulseGold {
+            0% { filter: drop-shadow(0 0 20px var(--accent-color)); }
+            50% { filter: drop-shadow(0 0 60px var(--accent-color)); }
+            100% { filter: drop-shadow(0 0 20px var(--accent-color)); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 顶部 HUD -->
+    <div class="hud">
+        <div class="merit-display">
+            <div class="merit-count" id="score">0</div>
+            <div class="merit-label">CYBER MERIT</div>
+        </div>
+        <div class="stats-display">
+            <div id="gps">0 / sec</div>
+            <div id="click-power">1 / click</div>
+        </div>
+    </div>
+
+    <!-- 游戏主舞台 -->
+    <div class="game-stage">
+        <!-- 浮动文字层 -->
+        <div class="floating-layer" id="floating-layer"></div>
+
+        <!-- 木鱼本体 -->
+        <div class="woodfish-wrapper" id="woodfish">
+            <!-- SVG 绘制了一个极简的赛博木鱼 -->
+            <svg class="woodfish-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                <!-- 木鱼主体 -->
+                <path d="M100,20 C40,20 20,80 20,130 C20,180 60,190 100,190 C140,190 180,180 180,130 C180,80 160,20 100,20 Z" 
+                      fill="none" stroke="currentColor" stroke-width="4" />
+                <!-- 木鱼头部开口 -->
+                <rect x="70" y="50" width="60" height="40" rx="10" ry="10" 
+                      fill="none" stroke="currentColor" stroke-width="3" />
+                <!-- 内部电路纹理 -->
+                <path d="M70,90 L100,90 L130,90" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4" opacity="0.5"/>
+                <circle cx="100" cy="130" r="8" fill="currentColor" opacity="0.8">
+                    <animate attributeName="opacity" values="0.2;0.8;0.2" dur="2s" repeatCount="indefinite" />
+                </circle>
+                <!-- 霓虹眼睛 -->
+                <circle cx="100" cy="70" r="4" fill="var(--primary-glow)" class="eye-glow" />
+            </svg>
+        </div>
+    </div>
+
+    <!-- 商店面板 -->
+    <div class="shop-panel" id="shop">
+        <div class="shop-title">System Upgrades // 系统升级</div>
+        
+        <!-- 升级项 1: 自动敲击 -->
+        <div class="upgrade-item" id="btn-auto" onclick="buyUpgrade('autoClicker')">
+            <div class="item-info">
+                <h4>电子敲击手</h4>
+                <p>每秒自动诵经 +1</p>
+            </div>
+            <div class="item-cost">
+                <div class="cost-val" id="cost-auto">15</div>
+            </div>
+            <div class="owned-count" id="count-auto">0</div>
+        </div>
+
+        <!-- 升级项 2: 点击倍率 -->
+        <div class="upgrade-item" id="btn-mult" onclick="buyUpgrade('multiplier')">
+            <div class="item-info">
+                <h4>量子佛经</h4>
+                <p>点击效率 x2</p>
+            </div>
+            <div class="item-cost">
+                <div class="cost-val" id="cost-mult">100</div>
+            </div>
+            <div class="owned-count" id="count-mult">0</div>
+        </div>
+
+        <!-- 升级项 3: 高级挂机 -->
+        <div class="upgrade-item" id="btn-mega" onclick="buyUpgrade('megaClicker')">
+            <div class="item-info">
+                <h4>机械飞升</h4>
+                <p>每秒自动诵经 +50</p>
+            </div>
+            <div class="item-cost">
+                <div class="cost-val" id="cost-mega">1000</div>
+            </div>
+            <div class="owned-count" id="count-mega">0</div>
+        </div>
+        
+        <!-- 升级项 4: 终极算力 -->
+        <div class="upgrade-item" id="btn-god" onclick="buyUpgrade('godMode')">
+            <div class="item-info">
+                <h4>量子核心</h4>
+                <p>每秒自动诵经 +500</p>
+            </div>
+            <div class="item-cost">
+                <div class="cost-val" id="cost-god">10000</div>
+            </div>
+            <div class="owned-count" id="count-god">0</div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * =========================================
+         * 赛博木鱼 - 核心逻辑脚本
+         * =========================================
+         */
+
+        // --- 1. 游戏状态数据 (持久化) ---
+        let gameState = {
+            merit: 0,
+            totalMerit: 0, // 累计获得功德，用于计算进化阶段
+            clickCount: 0,
+            // 升级物品数据结构
+            upgrades: {
+                autoClicker: { 
+                    id: 'autoClicker', 
+                    name: '电子敲击手', 
+                    count: 0, 
+                    baseCost: 15, 
+                    gps: 1 // Grants Per Second
+                },
+                multiplier: { 
+                    id: 'multiplier', 
+                    name: '量子佛经', 
+                    count: 0, 
+                    baseCost: 100, 
+                    mult: 2 // Click Multiplier
+                },
+                megaClicker: { 
+                    id: 'megaClicker', 
+                    name: '机械飞升', 
+                    count: 0, 
+                    baseCost: 1000, 
+                    gps: 50 
+                },
+                godMode: { 
+                    id: 'godMode', 
+                    name: '量子核心', 
+                    count: 0, 
+                    baseCost: 10000, 
+                    gps: 500 
+                }
+            }
+        };
+
+        // --- 2. 音频系统 (Web Audio API) ---
+        // 零素材依赖，使用振荡器合成声音
+        let audioCtx;
+        
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            // 恢复被浏览器挂起的音频上下文
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        /**
+         * 合成电子木鱼声
+         * 原理：
+         * 1. 使用 Triangle（三角波）作为主音，模拟木鱼的共振箱声音。
+         * 2. 使用 Sine（正弦波）作为高频敲击音。
+         * 3. 使用 GainNode 控制音量包络（Envelope），实现快速的 Attack (起音) 和 Decay (衰减)。
+         */
+        function playWoodfishSound() {
+            initAudio();
+            const t = audioCtx.currentTime;
+
+            // 声音1：低频体音 (200Hz - 400Hz 随机)
+            const osc1 = audioCtx.createOscillator();
+            const gain1 = audioCtx.createGain();
+            osc1.type = 'triangle';
+            osc1.frequency.setValueAtTime(250 + Math.random() * 100, t);
+            
+            gain1.gain.setValueAtTime(0, t);
+            gain1.gain.linearRampToValueAtTime(0.8, t + 0.01); // 快速起音
+            gain1.gain.exponentialRampToValueAtTime(0.01, t + 0.3); // 快速衰减
+
+            osc1.connect(gain1);
+            gain1.connect(audioCtx.destination);
+            osc1.start(t);
+            osc1.stop(t + 0.3);
+
+            // 声音2：高频敲击声 (模拟硬物碰撞，800Hz - 1200Hz)
+            const osc2 = audioCtx.createOscillator();
+            const gain2 = audioCtx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(1000 + Math.random() * 500, t);
+
+            gain2.gain.setValueAtTime(0, t);
+            gain2.gain.linearRampToValueAtTime(0.5, t + 0.005);
+            gain2.gain.exponentialRampToValueAtTime(0.01, t + 0.1); // 极短促
+
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.start(t);
+            osc2.stop(t + 0.1);
+        }
+
+        // --- 3. 游戏逻辑核心 ---
+
+        // 计算当前点击产生的功德
+        function getClickValue() {
+            let val = 1;
+            const multLevel = gameState.upgrades.multiplier.count;
+            // 量子佛经效果：2^(count) 倍率 (或者简单的 1 + count*2，这里采用乘法叠加更有趣)
+            // 简化逻辑：基础1 * (2 ^ 等级)
+            return val * Math.pow(2, multLevel);
+        }
+
+        // 计算每秒自动功德 (GPS)
+        function getGPS() {
+            let gps = 0;
+            gps += gameState.upgrades.autoClicker.count * gameState.upgrades.autoClicker.gps;
+            gps += gameState.upgrades.megaClicker.count * gameState.upgrades.megaClicker.gps;
+            gps += gameState.upgrades.godMode.count * gameState.upgrades.godMode.gps;
+            return gps;
+        }
+
+        // 获取升级价格 (指数增长算法)
+        function getCost(upgradeId) {
+            const item = gameState.upgrades[upgradeId];
+            // 价格 = 基础价格 * (1.15 ^ 数量)
+            return Math.floor(item.baseCost * Math.pow(1.15, item.count));
+        }
+
+        // 核心：点击木鱼
+        function onWoodfishClick(e) {
+            const val = getClickValue();
+            gameState.merit += val;
+            gameState.totalMerit += val;
+            gameState.clickCount++;
+
+            // 1. 播放音效
+            playWoodfishSound();
+
+            // 2. 视觉反馈
+            spawnFloatingText(e.clientX, e.clientY, `+${formatNumber(val)}`);
+            triggerShake();
+            
+            // 3. 更新UI
+            updateUI();
+            checkEvolution();
+            saveGame();
+        }
+
+        // 触发屏幕震动
+        function triggerShake() {
+            const stage = document.querySelector('.game-stage');
+            // 移除类以重置动画
+            stage.classList.remove('shake-effect');
+            void stage.offsetWidth; // 强制回流
+            stage.classList.add('shake-effect');
+        }
+
+        // 生成浮动数字
+        function spawnFloatingText(x, y, text) {
+            const layer = document.getElementById('floating-layer');
+            const el = document.createElement('div');
+            el.className = 'floater';
+            el.innerText = text;
+            
+            // 随机一点偏移
+            const offsetX = (Math.random() - 0.5) * 40;
+            
+            el.style.left = `${x + offsetX}px`;
+            el.style.top = `${y - 50}px`; // 在点击位置上方
+            
+            layer.appendChild(el);
+
+            // 动画结束后移除DOM
+            setTimeout(() => {
+                el.remove();
+            }, 1000);
+        }
+
+        // 购买升级
+        function buyUpgrade(id) {
+            const cost = getCost(id);
+            if (gameState.merit >= cost) {
+                gameState.merit -= cost;
+                gameState.upgrades[id].count++;
+                updateUI();
+                saveGame();
+            } else {
+                // 钱不够的反馈？这里简单处理，商店按钮会变灰
+            }
+        }
+
+        // --- 4. 视觉进化系统 ---
+        function checkEvolution() {
+            const root = document.documentElement;
+            const total = gameState.totalMerit;
+
+            if (total > 100000) {
+                root.className = 'level-3';
+            } else if (total > 10000) {
+                root.className = 'level-2';
+            } else if (total > 1000) {
+                root.className = 'level-1';
+            } else {
+                root.className = ''; // 初始黑白
+            }
+        }
+
+        // --- 5. 循环与持久化 ---
+        
+        // 主循环 (每秒运行)
+        setInterval(() => {
+            const gps = getGPS();
+            if (gps > 0) {
+                gameState.merit += gps;
+                gameState.totalMerit += gps;
+                updateUI();
+                checkEvolution();
+                // 不用每次循环都存，每10秒存一次或者操作后存
+            }
+        }, 1000);
+
+        // 自动存档 (每10秒)
+        setInterval(saveGame, 10000);
+
+        function saveGame() {
+            localStorage.setItem('cyberWoodfishSave', JSON.stringify(gameState));
+        }
+
+        function loadGame() {
+            const saved = localStorage.getItem('cyberWoodfishSave');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // 简单的合并逻辑，防止更新导致存档错误
+                    // 注意：实际项目中应该做深合并或版本校验，这里简化处理
+                    if(parsed.upgrades) {
+                        gameState = { ...gameState, ...parsed };
+                        // 确保数据结构完整（如果更新了游戏添加了新升级）
+                        for(let key in gameState.upgrades) {
+                            if(parsed.upgrades[key]) {
+                                gameState.upgrades[key].count = parsed.upgrades[key].count;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("存档读取失败", e);
+                }
+            }
+            // 初始化UI
+            updateUI();
+            checkEvolution();
+        }
+
+        // --- 6. UI 渲染与辅助 ---
+
+        function updateUI() {
+            // 更新顶部数据
+            document.getElementById('score').innerText = formatNumber(Math.floor(gameState.merit));
+            document.getElementById('gps').innerText = `${formatNumber(getGPS())} / sec`;
+            document.getElementById('click-power').innerText = `${formatNumber(getClickValue())} / click`;
+
+            // 更新商店按钮状态
+            updateShopItem('autoClicker');
+            updateShopItem('multiplier');
+            updateShopItem('megaClicker');
+            updateShopItem('godMode');
+        }
+
+        function updateShopItem(id) {
+            const cost = getCost(id);
+            const el = document.getElementById(`cost-${id === 'autoClicker' ? 'auto' : id === 'megaClicker' ? 'mega' : id === 'godMode' ? 'god' : 'mult'}`); // 简单映射ID
+            const countEl = document.getElementById(`count-${id === 'autoClicker' ? 'auto' : id === 'megaClicker' ? 'mega' : id === 'godMode' ? 'god' : 'mult'}`);
+            const btn = document.getElementById(`btn-${id === 'autoClicker' ? 'auto' : id === 'megaClicker' ? 'mega' : id === 'godMode' ? 'god' : 'mult'}`);
+            
+            // 修正映射问题，上面偷懒了，直接用内联ID可能更稳
+            const costEl = document.getElementById(`cost-${id === 'autoClicker' ? 'auto' : id === 'megaClicker' ? 'mega' : id}`);
+            
+            if(costEl) costEl.innerText = formatNumber(cost);
+            if(countEl) countEl.innerText = gameState.upgrades[id].count;
+
+            // 禁用状态样式
+            if (gameState.merit < cost) {
+                btn.classList.add('disabled');
+            } else {
+                btn.classList.remove('disabled');
+            }
+        }
+        
+        // 修正 updateShopItem 中的 ID 映射逻辑，因为命名不一致
+        function updateShopItemFixed(id) {
+            const cost = getCost(id);
+            // 根据 ID 获取 DOM
+            let costEl, countEl, btn;
+            
+            // 映射表：key 是 JS ID，value 是 DOM ID 后缀
+            const map = {
+                'autoClicker': ['auto', 'auto'],
+                'multiplier': ['mult', 'mult'],
+                'megaClicker': ['mega', 'mega'],
+                'godMode': ['god', 'god']
+            };
+            
+            const suffix = map[id][0];
+            
+            costEl = document.getElementById(`cost-${suffix}`);
+            countEl = document.getElementById(`count-${suffix}`);
+            btn = document.getElementById(`btn-${suffix}`);
+
+            if(costEl) costEl.innerText = formatNumber(cost);
+            if(countEl) countEl.innerText = gameState.upgrades[id].count;
+
+            if (btn) {
+                if (gameState.merit < cost) {
+                    btn.classList.add('disabled');
+                } else {
+                    btn.classList.remove('disabled');
+                }
+            }
+        }
+
+        // 覆盖之前的 updateShopItem 调用
+        // 为了保持代码整洁，这里重新定义 updateUI 内部调用的函数
+        function updateUI() {
+            document.getElementById('score').innerText = formatNumber(Math.floor(gameState.merit));
+            document.getElementById('gps').innerText = `${formatNumber(getGPS())} / sec`;
+            document.getElementById('click-power').innerText = `${formatNumber(getClickValue())} / click`;
+
+            updateShopItemFixed('autoClicker');
+            updateShopItemFixed('multiplier');
+            updateShopItemFixed('megaClicker');
+            updateShopItemFixed('godMode');
+        }
+
+        // 大数字格式化 (1.2k, 1.5M 等)
+        function formatNumber(num) {
+            if (num < 1000) return Math.floor(num);
+            if (num < 1000000) return (num / 1000).toFixed(1) + 'k';
+            return (num / 1000000).toFixed(2) + 'M';
+        }
+
+        // --- 7. 初始化 ---
+        
+        window.onload = function() {
+            loadGame();
+            
+            // 绑定点击事件
+            document.getElementById('woodfish').addEventListener('mousedown', onWoodfishClick);
+            // 兼容移动端触摸
+            document.getElementById('woodfish').addEventListener('touchstart', function(e) {
+                e.preventDefault(); // 防止双击缩放
+                // Touchstart 没有 clientX，需要取 touches[0]
+                // 但这里简化直接调用，传入伪事件对象或从 touches 获取
+                const touch = e.touches[0];
+                // 构造一个兼容对象传给处理函数
+                onWoodfishClick({
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+            }, { passive: false });
+
+            // 初始化音频上下文（等待用户交互才真正激活，但先创建对象）
+            document.body.addEventListener('click', initAudio, { once: true });
+        };
+
+    </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"c7e5a76ab56c4a5c86c9d2b1d03a75a3","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
